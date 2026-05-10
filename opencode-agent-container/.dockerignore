@@ -1,0 +1,6 @@
+.git
+.env
+config.json
+opencode.json
+opencode.jsonc
+*.log

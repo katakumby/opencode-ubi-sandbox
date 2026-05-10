@@ -1,0 +1,83 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+
+  // Replace these model IDs with the exact ids returned by your vLLM /v1/models endpoint.
+  "model": "vllm-code/<exact-vllm-coding-model-id>",
+  // Keep this equal to model unless you add a separate lightweight model under provider.vllm-code.models.
+  "small_model": "vllm-code/<exact-vllm-coding-model-id>",
+
+  "enabled_providers": ["vllm-code", "vllm-vision"],
+  "share": "disabled",
+  "autoupdate": false,
+
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  },
+
+  "provider": {
+    "vllm-code": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Private vLLM Coding",
+      "options": {
+        "baseURL": "{env:VLLM_CODE_BASE_URL}",
+        "apiKey": "{env:VLLM_API_KEY}",
+        "headers": {
+          "x-user": "{env:OPENCODE_HEADER_USER}",
+          "x-domain": "{env:OPENCODE_HEADER_DOMAIN}"
+        },
+        "timeout": 600000,
+        "chunkTimeout": 60000
+      },
+      "models": {
+        "<exact-vllm-coding-model-id>": {
+          "name": "Private coding model",
+          "tool_call": true,
+          "attachment": false,
+          "reasoning": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 32768,
+            "output": 8192
+          }
+        }
+      }
+    },
+
+    "vllm-vision": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Private vLLM Vision",
+      "options": {
+        "baseURL": "{env:VLLM_VISION_BASE_URL}",
+        "apiKey": "{env:VLLM_API_KEY}",
+        "headers": {
+          "x-user": "{env:OPENCODE_HEADER_USER}",
+          "x-domain": "{env:OPENCODE_HEADER_DOMAIN}"
+        },
+        "timeout": 600000,
+        "chunkTimeout": 60000
+      },
+      "models": {
+        "<exact-vllm-vision-model-id>": {
+          "name": "Private vision model",
+          "tool_call": true,
+          "attachment": true,
+          "reasoning": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text", "image"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 32768,
+            "output": 8192
+          }
+        }
+      }
+    }
+  }
+}
