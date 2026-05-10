@@ -85,16 +85,55 @@ The default config path is `/workspace/config.json`. For an alternate path, pass
 
 ## Run From PowerShell
 
-From the workspace you want OpenCode to edit:
+Prepare a workspace-local config and env file:
 
 ```powershell
 $agent = "E:\AI\workspaces\opencode-agent-container"
+$workspace = (Get-Location).Path
+
+Copy-Item "$agent\config.example.jsonc" "$workspace\config.json"
+Copy-Item "$agent\.env.example" "$workspace\.env"
+```
+
+Build the image from the agent image project:
+
+```powershell
+$agent = "E:\AI\workspaces\opencode-agent-container"
+
+docker build -t ai-agent-opencode:local $agent
+```
+
+Run the TUI from the workspace you want OpenCode to edit:
+
+```powershell
 $workspace = (Get-Location).Path
 
 docker run --rm -it `
   --env-file "$workspace\.env" `
   -v "${workspace}:/workspace" `
   ai-agent-opencode:local
+```
+
+List configured vLLM models:
+
+```powershell
+$workspace = (Get-Location).Path
+
+docker run --rm -it `
+  --env-file "$workspace\.env" `
+  -v "${workspace}:/workspace" `
+  ai-agent-opencode:local models vllm-code
+```
+
+Run a small non-editing smoke prompt:
+
+```powershell
+$workspace = (Get-Location).Path
+
+docker run --rm -it `
+  --env-file "$workspace\.env" `
+  -v "${workspace}:/workspace" `
+  ai-agent-opencode:local run --model vllm-code/qwen3-coder-30b-a3b-fp8 "Reply exactly: OK"
 ```
 
 Check the OpenCode version:

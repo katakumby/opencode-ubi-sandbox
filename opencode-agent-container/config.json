@@ -1,0 +1,45 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "vllm-code/qwen3-coder-30b-a3b-fp8",
+  "small_model": "vllm-code/qwen3-coder-30b-a3b-fp8",
+  "enabled_providers": ["vllm-code"],
+  "share": "disabled",
+  "autoupdate": false,
+  "permission": {
+    "edit": "ask",
+    "bash": "ask"
+  },
+  "provider": {
+    "vllm-code": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "RunPod vLLM Qwen Coder",
+      "options": {
+        "baseURL": "{env:VLLM_CODE_BASE_URL}",
+        "apiKey": "{env:VLLM_API_KEY}",
+        "headers": {
+          "x-user": "{env:OPENCODE_HEADER_USER}",
+          "x-domain": "{env:OPENCODE_HEADER_DOMAIN}"
+        },
+        "timeout": 600000,
+        "chunkTimeout": 60000
+      },
+      "models": {
+        "qwen3-coder-30b-a3b-fp8": {
+          "name": "Qwen3 Coder 30B A3B FP8",
+          "tool_call": true,
+          "attachment": false,
+          "reasoning": false,
+          "temperature": true,
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "limit": {
+            "context": 262144,
+            "output": 32768
+          }
+        }
+      }
+    }
+  }
+}
