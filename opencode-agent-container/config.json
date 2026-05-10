@@ -14,12 +14,14 @@
       "npm": "@ai-sdk/openai-compatible",
       "name": "RunPod vLLM Qwen Coder",
       "options": {
-        "baseURL": "{env:VLLM_CODE_BASE_URL}",
+        "baseURL": "{env:OPENCODE_VLLM_CODE_BASE_URL}",
         "apiKey": "{env:VLLM_API_KEY}",
         "headers": {
           "x-user": "{env:OPENCODE_HEADER_USER}",
-          "x-domain": "{env:OPENCODE_HEADER_DOMAIN}"
+          "x-domain": "{env:OPENCODE_HEADER_DOMAIN}",
+          "Accept-Encoding": "identity"
         },
+        "includeUsage": false,
         "timeout": 600000,
         "chunkTimeout": 60000
       },
@@ -36,7 +38,7 @@
           },
           "limit": {
             "context": 262144,
-            "output": 32768
+            "output": 8192
           }
         }
       }

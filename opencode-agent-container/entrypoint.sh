@@ -4,9 +4,15 @@ set -euo pipefail
 OPENCODE_RUN_USER="${OPENCODE_RUN_USER:-opencode}"
 WORKSPACE_DIR="${WORKSPACE_DIR:-/workspace}"
 OPENCODE_CONFIG="${OPENCODE_CONFIG:-${WORKSPACE_DIR%/}/config.json}"
+SYSTEM_CA_BUNDLE="${SYSTEM_CA_BUNDLE:-/etc/pki/tls/certs/ca-bundle.crt}"
+OPENCODE_VLLM_PROXY_ADDR="${OPENCODE_VLLM_PROXY_ADDR:-127.0.0.1:11434}"
 
 export WORKSPACE_DIR
 export OPENCODE_CONFIG
+export OPENCODE_VLLM_PROXY_ADDR
+export SSL_CERT_FILE="${SSL_CERT_FILE:-$SYSTEM_CA_BUNDLE}"
+export CURL_CA_BUNDLE="${CURL_CA_BUNDLE:-$SYSTEM_CA_BUNDLE}"
+export NODE_EXTRA_CA_CERTS="${NODE_EXTRA_CA_CERTS:-$SYSTEM_CA_BUNDLE}"
 export OPENCODE_DISABLE_AUTOUPDATE="${OPENCODE_DISABLE_AUTOUPDATE:-true}"
 export OPENCODE_HEADER_USER="${OPENCODE_HEADER_USER:-${USERNAME:-${USER:-developer}}}"
 export OPENCODE_HEADER_DOMAIN="${OPENCODE_HEADER_DOMAIN:-${USER_DOMAIN:-${DOMAIN:-local}}}"
@@ -15,6 +21,81 @@ COMMAND=()
 
 warn() {
   printf 'opencode-entrypoint: %s\n' "$*" >&2
+}
+
+append_no_proxy() {
+  local value="$1"
+
+  case ",${NO_PROXY:-}," in
+    *,"$value",*) ;;
+    *) export NO_PROXY="${NO_PROXY:+$NO_PROXY,}$value" ;;
+  esac
+
+  case ",${no_proxy:-}," in
+    *,"$value",*) ;;
+    *) export no_proxy="${no_proxy:+$no_proxy,}$value" ;;
+  esac
+}
+
+rewrite_loopback_proxy_url() {
+  local value="$1"
+  local host="${HOST_PROXY_HOST:-host.docker.internal}"
+
+  if [ "${REWRITE_LOOPBACK_PROXY:-true}" != "true" ]; then
+    printf '%s' "$value"
+    return
+  fi
+
+  value="${value//:\/\/127.0.0.1:/:\/\/$host:}"
+  value="${value//:\/\/localhost:/:\/\/$host:}"
+  value="${value//:\/\/[::1]:/:\/\/$host:}"
+  printf '%s' "$value"
+}
+
+normalize_proxy_env() {
+  if [ -n "${HTTPS_PROXY:-${https_proxy:-}}" ]; then
+    export HTTPS_PROXY
+    HTTPS_PROXY="$(rewrite_loopback_proxy_url "${HTTPS_PROXY:-$https_proxy}")"
+    export https_proxy="${https_proxy:-$HTTPS_PROXY}"
+    https_proxy="$(rewrite_loopback_proxy_url "$https_proxy")"
+  fi
+
+  if [ -n "${HTTP_PROXY:-${http_proxy:-}}" ]; then
+    export HTTP_PROXY
+    HTTP_PROXY="$(rewrite_loopback_proxy_url "${HTTP_PROXY:-$http_proxy}")"
+    export http_proxy="${http_proxy:-$HTTP_PROXY}"
+    http_proxy="$(rewrite_loopback_proxy_url "$http_proxy")"
+  fi
+
+  if [ -n "${NO_PROXY:-${no_proxy:-}}" ]; then
+    export NO_PROXY="${NO_PROXY:-$no_proxy}"
+    export no_proxy="${no_proxy:-$NO_PROXY}"
+  fi
+
+  if [ -n "${ALL_PROXY:-${all_proxy:-}}" ]; then
+    export ALL_PROXY
+    ALL_PROXY="$(rewrite_loopback_proxy_url "${ALL_PROXY:-$all_proxy}")"
+    export all_proxy="${all_proxy:-$ALL_PROXY}"
+    all_proxy="$(rewrite_loopback_proxy_url "$all_proxy")"
+  fi
+}
+
+configure_vllm_proxy() {
+  export OPENCODE_VLLM_CODE_BASE_URL="${OPENCODE_VLLM_CODE_BASE_URL:-${VLLM_CODE_BASE_URL:-}}"
+
+  if [ "${OPENCODE_VLLM_PROXY_ENABLED:-false}" != "true" ]; then
+    return
+  fi
+
+  if [ -z "${VLLM_CODE_BASE_URL:-}" ]; then
+    warn "OPENCODE_VLLM_PROXY_ENABLED=true requires VLLM_CODE_BASE_URL"
+    return
+  fi
+
+  export VLLM_PROXY_UPSTREAM_BASE_URL="${VLLM_PROXY_UPSTREAM_BASE_URL:-$VLLM_CODE_BASE_URL}"
+  export OPENCODE_VLLM_CODE_BASE_URL="http://${OPENCODE_VLLM_PROXY_ADDR%/}/v1"
+  append_no_proxy "127.0.0.1"
+  append_no_proxy "localhost"
 }
 
 ensure_runtime_dirs() {
@@ -37,6 +118,33 @@ should_warn_missing_config() {
       return 0
       ;;
   esac
+}
+
+start_vllm_proxy() {
+  if [ "${OPENCODE_VLLM_PROXY_ENABLED:-false}" != "true" ]; then
+    return
+  fi
+
+  if [ "$(id -u)" = "0" ]; then
+    setpriv \
+      --reuid="$(id -u "$OPENCODE_RUN_USER")" \
+      --regid="$(id -g "$OPENCODE_RUN_USER")" \
+      --init-groups \
+      /usr/local/bin/vllm-h2-proxy &
+  else
+    /usr/local/bin/vllm-h2-proxy &
+  fi
+
+  local attempt
+  for attempt in $(seq 1 50); do
+    if curl -fsS --noproxy '*' "http://${OPENCODE_VLLM_PROXY_ADDR}/healthz" >/dev/null 2>&1; then
+      return
+    fi
+    sleep 0.1
+  done
+
+  warn "vLLM HTTP/2 proxy did not become ready on ${OPENCODE_VLLM_PROXY_ADDR}"
+  return 1
 }
 
 set_local_identity() {
@@ -73,11 +181,14 @@ run_command() {
 }
 
 resolve_command "$@"
+normalize_proxy_env
+configure_vllm_proxy
 ensure_runtime_dirs
 
 if [ "$(id -u)" = "0" ]; then
   set_local_identity
   chown -R "$OPENCODE_RUN_USER:$(id -gn "$OPENCODE_RUN_USER")" "$HOME"
+  start_vllm_proxy
 
   cd "$WORKSPACE_DIR"
   exec setpriv \
@@ -87,4 +198,5 @@ if [ "$(id -u)" = "0" ]; then
     "${COMMAND[@]}"
 fi
 
+start_vllm_proxy
 run_command

@@ -1,5 +1,7 @@
 .git
 .env
+.agents
+skills-lock.json
 config.json
 opencode.json
 opencode.jsonc
